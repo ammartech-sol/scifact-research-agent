@@ -1,9 +1,26 @@
+import logging
+import time
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="scifact-research-agent")
+logger = logging.getLogger("uvicorn.error")
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    started = time.perf_counter()
+    # Imported here, not at the top, so tests (which never run start-up) do not need torch.
+    from app.embedder import load_embedder
+
+    load_embedder()
+    logger.info("embedding model ready in %.1f s (includes importing torch)", time.perf_counter() - started)
+    yield
+
+
+app = FastAPI(title="scifact-research-agent", lifespan=lifespan)
 
 
 class AskRequest(BaseModel):
