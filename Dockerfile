@@ -4,12 +4,23 @@ COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.1.0 /lambda-adapter /opt
 
 ENV AWS_LWA_PORT=8080 \
     AWS_LWA_READINESS_CHECK_PATH=/health \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    EMBEDDING_MODEL_PATH=/opt/models/bge-small-en-v1.5 \
+    HF_HOME=/tmp/huggingface
 
 WORKDIR /var/task
 
+# CPU-only torch first: it is the biggest layer and changes least.
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.15.0
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+COPY scripts/download_embedding_model.py scripts/
+RUN python scripts/download_embedding_model.py
+
+# From here on the image must never reach for the internet.
+ENV HF_HUB_OFFLINE=1
 
 COPY app/ app/
 
