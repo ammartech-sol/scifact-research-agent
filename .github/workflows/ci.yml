@@ -1,0 +1,64 @@
+name: ci
+
+on: push
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: scifact-research-agent
+  FUNCTION_NAME: scifact-agent-AgentFunction-MxIfJubCdvBl
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install fastapi==0.162.2 pydantic==2.14.3 pytest==9.2.0 httpx==0.28.1
+
+      - name: Run tests
+        run: pytest
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Get temporary AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: true
+
+      - name: Log in to ECR
+        run: |
+          REGISTRY="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com"
+          echo "IMAGE_URI=${REGISTRY}/${ECR_REPOSITORY}:${{ github.sha }}" >> "$GITHUB_ENV"
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+
+      - name: Build image
+        run: docker build --platform linux/amd64 --provenance=false -t "$IMAGE_URI" .
+
+      - name: Push image
+        run: docker push "$IMAGE_URI"
+
+      - name: Point Lambda at the new image
+        run: |
+          aws lambda update-function-code --function-name "$FUNCTION_NAME" --image-uri "$IMAGE_URI" > /dev/null
+          aws lambda wait function-updated --function-name "$FUNCTION_NAME"
+
+      - name: Show the live image
+        run: aws lambda get-function --function-name "$FUNCTION_NAME" --query "Code.ImageUri" --output text
