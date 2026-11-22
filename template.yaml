@@ -17,6 +17,9 @@ Resources:
         - x86_64
       MemorySize: 3008
       Timeout: 60
+      Environment:
+        Variables:
+          AWS_LWA_ASYNC_INIT: "true"
       FunctionUrlConfig:
         AuthType: NONE
 
