@@ -5,6 +5,11 @@ on: push
 permissions:
   contents: read
 
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: scifact-research-agent
+  FUNCTION_NAME: scifact-agent-AgentFunction-MxIfJubCdvBl
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -20,3 +25,41 @@ jobs:
 
       - name: Run tests
         run: pytest
+
+  deploy:
+    needs: test
+    # TEMPORARY: ci-setup is allowed so we can test before merging. Delete it after the merge.
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ci-setup'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Get temporary AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          mask-aws-account-id: true
+
+      - name: Log in to ECR
+        run: |
+          REGISTRY="$(aws sts get-caller-identity --query Account --output text).dkr.ecr.${AWS_REGION}.amazonaws.com"
+          echo "IMAGE_URI=${REGISTRY}/${ECR_REPOSITORY}:${{ github.sha }}" >> "$GITHUB_ENV"
+          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+
+      - name: Build image
+        run: docker build --platform linux/amd64 --provenance=false -t "$IMAGE_URI" .
+
+      - name: Push image
+        run: docker push "$IMAGE_URI"
+
+      - name: Point Lambda at the new image
+        run: |
+          aws lambda update-function-code --function-name "$FUNCTION_NAME" --image-uri "$IMAGE_URI" > /dev/null
+          aws lambda wait function-updated --function-name "$FUNCTION_NAME"
+
+      - name: Show the live image
+        run: aws lambda get-function --function-name "$FUNCTION_NAME" --query "Code.ImageUri" --output text
