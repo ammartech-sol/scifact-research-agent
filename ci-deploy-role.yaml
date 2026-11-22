@@ -38,8 +38,7 @@ Resources:
                 "token.actions.githubusercontent.com:aud": sts.amazonaws.com
                 "token.actions.githubusercontent.com:sub":
                   - !Sub "repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepo}@${GitHubRepoId}:ref:refs/heads/main"
-                  # TEMPORARY: lets the ci-setup branch test the deploy. Delete this line after the merge.
-                  - !Sub "repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepo}@${GitHubRepoId}:ref:refs/heads/ci-setup"
+
       Policies:
         - PolicyName: push-image-and-update-function
           PolicyDocument:

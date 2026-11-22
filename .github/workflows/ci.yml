@@ -28,8 +28,7 @@ jobs:
 
   deploy:
     needs: test
-    # TEMPORARY: ci-setup is allowed so we can test before merging. Delete it after the merge.
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ci-setup'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
