@@ -6,3 +6,4 @@
 .aws-sam
 scratch
 tests
+local_models
